@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0c1c22" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+<title>呼吸のスイッチ — 吐き切りトレーナー</title>
+<style>
+  :root{
+    --bg0:#0b1a20; --bg1:#123138; --orb1:#93e3cf; --orb2:#3fa895;
+    --ink:#eaf3f0; --muted:#8aa9a2; --sand:#e7c99b; --line:rgba(255,255,255,.08);
+    --inhale:4s; --exhale:8s;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+    color:var(--ink);
+    background:radial-gradient(120% 90% at 50% 8%, #16414a 0%, var(--bg1) 42%, var(--bg0) 100%);
+    min-height:100dvh; display:flex; flex-direction:column; align-items:center;
+    padding:max(20px,env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{width:100%; max-width:420px; display:flex; flex-direction:column; flex:1;}
+  header{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+  .brand{font-size:12px; letter-spacing:.28em; color:var(--muted);}
+  .mute{background:none; border:1px solid var(--line); color:var(--muted); font-size:12px;
+        padding:6px 10px; border-radius:999px; cursor:pointer;}
+  .mute[aria-pressed="true"]{color:var(--ink); border-color:rgba(147,227,207,.5);}
+  h1{font-size:22px; font-weight:600; letter-spacing:.02em; margin:2px 0 2px;}
+  .sub{font-size:12.5px; color:var(--muted); margin-bottom:16px; line-height:1.6;}
+  /* tabs */
+  .tabs{display:flex; gap:6px; background:rgba(255,255,255,.04); padding:4px; border-radius:14px; margin-bottom:18px;}
+  .tab{flex:1; text-align:center; padding:11px 0; border-radius:10px; font-size:14px; color:var(--muted);
+       background:none; border:none; cursor:pointer; transition:.25s;}
+  .tab[aria-selected="true"]{background:rgba(147,227,207,.14); color:var(--ink);}
+  .panel{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .panel[hidden]{display:none;}
+  /* orb */
+  .stage{position:relative; width:260px; height:260px; display:grid; place-items:center; margin:8px 0 6px;}
+  .orb{width:150px; height:150px; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, var(--orb1), var(--orb2) 70%);
+    box-shadow:0 0 60px rgba(80,190,170,.35), inset 0 0 40px rgba(255,255,255,.15);
+    transform:scale(.62); transition:transform .3s linear;}
+  .ring{position:absolute; inset:0; border-radius:50%; border:1px solid var(--line);}
+  .phase{font-size:20px; letter-spacing:.14em; min-height:28px; margin-top:4px;}
+  .count{font-size:12px; color:var(--muted); margin-top:2px; letter-spacing:.1em;}
+  /* measure */
+  .timer{font-size:64px; font-weight:300; font-variant-numeric:tabular-nums; letter-spacing:.02em;}
+  .timer small{font-size:20px; color:var(--muted); margin-left:4px;}
+  .best{font-size:13px; color:var(--sand); margin-top:8px; min-height:20px; letter-spacing:.04em;}
+  .hint{font-size:12.5px; color:var(--muted); text-align:center; line-height:1.7; margin-top:14px; max-width:300px;}
+  /* buttons */
+  .cta{margin-top:22px; width:100%; max-width:300px; padding:16px; border-radius:14px; border:none;
+    font-size:16px; font-weight:600; letter-spacing:.06em; cursor:pointer; color:#06231d;
+    background:linear-gradient(180deg,var(--orb1),var(--orb2)); transition:.2s;}
+  .cta:active{transform:translateY(1px);}
+  .cta.ghost{background:none; color:var(--muted); border:1px solid var(--line); font-weight:500;}
+  footer{margin-top:auto; padding-top:22px; text-align:center;}
+  .med{font-size:11px; color:var(--muted); line-height:1.7; opacity:.9;}
+  .up{display:inline-block; margin-top:14px; font-size:12px; color:var(--orb1);
+      text-decoration:none; border-bottom:1px solid rgba(147,227,207,.3); padding-bottom:2px;}
+  :focus-visible{outline:2px solid var(--orb1); outline-offset:3px;}
+  @media (prefers-reduced-motion: reduce){ .orb{transition:none;} }
+  .install{position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom));
+    max-width:396px; margin:0 auto; display:flex; gap:10px; align-items:center;
+    background:rgba(18,49,56,.97); border:1px solid var(--line); border-radius:14px;
+    padding:12px 14px; box-shadow:0 12px 30px rgba(0,0,0,.45); font-size:12.5px; line-height:1.65; z-index:60;}
+  .install[hidden]{display:none;}
+  .install .msg{flex:1; color:var(--ink);}
+  .install .msg b{color:var(--orb1);}
+  .install .x{background:none; border:none; color:var(--muted); font-size:20px; line-height:1; cursor:pointer; padding:0 2px;}
+  .why{margin-top:20px; border-top:1px solid var(--line); padding-top:14px;}
+  .why summary{cursor:pointer; font-size:14px; color:var(--ink); list-style:none; display:flex; align-items:center; gap:8px;}
+  .why summary::-webkit-details-marker{display:none;}
+  .why summary::before{content:"＋"; color:var(--orb1);}
+  .why[open] summary::before{content:"－";}
+  .why .body{font-size:12.5px; color:var(--muted); line-height:1.85; margin-top:10px;}
+  .why .step b{color:var(--orb1); margin-right:2px;}
+  .why .note{opacity:.8; margin-top:8px;}
+  .why .rel{margin-top:12px; display:flex; flex-direction:column; gap:8px;}
+  .why .rel a{font-size:12.5px; color:var(--ink); text-decoration:none; display:flex; gap:8px; align-items:center; padding:9px 11px; border:1px solid var(--line); border-radius:10px;}
+  .why .rel a::before{content:"▶"; color:var(--orb1); font-size:9px;}
+  .why .ch{display:inline-block; margin-top:10px; font-size:12px; color:var(--muted); text-decoration:none;}
+  /* ===== 共通：スプラッシュ（ロゴ＋タグライン） ===== */
+  #splash{position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    background:radial-gradient(120% 90% at 50% 40%, #16414a 0%, var(--bg1) 45%, var(--bg0) 100%); transition:opacity .6s ease;}
+  #splash.hide{opacity:0; pointer-events:none;}
+  #splash .sp-logo{width:132px; height:132px; object-fit:contain; opacity:0; transform:scale(.92); animation:spIn .8s ease forwards;}
+  #splash .sp-tag{font-size:14px; letter-spacing:.14em; color:var(--muted); opacity:0; animation:tagIn .8s ease .35s forwards;}
+  @keyframes spIn{to{opacity:1; transform:scale(1);}}
+  @keyframes tagIn{to{opacity:1;}}
+  .brand-logo{width:16px; height:16px; object-fit:contain; vertical-align:-3px; margin-right:6px;}
+  @media (prefers-reduced-motion: reduce){ #splash .sp-logo,#splash .sp-tag{animation:none; opacity:1; transform:none;} }
+</style>
+</head>
+<body>
+<div id="splash" aria-hidden="true">
+  <img src="icons/fnt-logo.png" alt="Functional Neuro Training" class="sp-logo" />
+  <div class="sp-tag">〜 神経科学で、変わるカラダ。 〜</div>
+</div>
+<div class="wrap">
+  <header>
+    <span class="brand"><img src="icons/fnt-logo.png" alt="" class="brand-logo" />カラダマニア</span>
+    <button class="mute" id="mute" aria-pressed="true">🔈 音声オン</button>
+  </header>
+  <h1>呼吸のスイッチ</h1>
+  <p class="sub">「吸う」より「吐く」。長く吐き切って、神経に“安全”を伝える練習。</p>
+
+  <!-- GUIDE（計測モードは削除・ガイド単画面） -->
+  <section class="panel" id="p-guide">
+    <div class="stage">
+      <div class="ring"></div>
+      <div class="orb" id="orb"></div>
+    </div>
+    <div class="phase" id="phase">準備できたら開始</div>
+    <div class="count" id="cycle">0 呼吸</div>
+    <button class="cta" id="guideBtn">開始する</button>
+    <p class="hint">吸う4秒 → 吐く息を少しずつ長く（最大12秒）。慣れたらリズムをランダムに。玉が縮む間、最後まで吐き切ってみてください。</p>
+  </section>
+
+  <details class="why">
+    <summary>なぜ効くの？（神経科学の話）</summary>
+    <div class="body">
+      <p class="step"><b>A.</b>浅い呼吸は、神経が“危険”と判断して選んだ守りの反応。肺が弱いわけじゃない。</p>
+      <p class="step"><b>B.</b>長く吐くと、吐く間に心拍が下がり副交感（休息）側へ。神経に“安全”が伝わる。</p>
+      <p class="step"><b>C.</b>安全と分かると体は守りをゆるめ、横隔膜が動きやすくなる → 自然と深く吸える。</p>
+      <p class="step"><b>D.</b>くり返すほど神経が覚える。だから毎日の1分が効く。</p>
+      <p class="step" style="margin-top:12px;">ゆっくり呼吸で心拍のゆらぎ（HRV）が高まり、体が休息モードに傾きやすい、と研究で言われています。</p>
+      <p class="step">特に“吐く息”を長くすると、HRVが上がる方向に働く、と報告されています。</p>
+      <p class="step" style="margin-top:12px;">呼吸に注意を向けると、体の内側の感覚を扱う“島皮質”が働き、注意の切り替えに関わるネットワーク（セイリエンスネットワーク）と関係すると考えられています。これはまだ“こう考えられています”の段階で、鍛えると言い切れるものではありません。</p>
+      <p class="note">※なぜ「12秒まで延ばした後にランダム」にするのか——同じリズムに慣れると、脳は刺激に注意を向けにくくなります（慣れ）。だから最大まで延ばした後にリズムをランダムにして予測を崩すと、気づき（内受容感覚）を保ちやすい——という“設計上の考え方”です（これを直接示した研究はまだありません＝弱い・仮説）。</p>
+      <p class="note">※呼気を長くするとリラックス指標が上がる報告が多い一方、差が出ない報告もあります（あくまで一つの考え方として）。「治る・必ず効く」というものではありません。</p>
+      <!-- エビデンスメモ（DOI）：
+        HRV×スローブリージング Zaccaro 2018 SR ── 10.3389/fnhum.2018.00353
+        HRVバイオフィードバック Laborde 2022 メタ ── 10.1016/j.neubiorev.2022.104711
+        呼気延長×HRV De Couck 2019 RCT ── 10.1016/j.ijpsycho.2019.02.011
+        島皮質・内受容感覚 ── 10.1093/scan/nss066 / 10.1093/scan/nsu042
+        セイリエンスネットワーク総説 ── 10.1007/s00429-010-0262-0
+      -->
+      <div class="rel">
+        <a href="https://www.youtube.com/watch?v=Oq8AU0samQ0" target="_blank" rel="noopener">究極の呼吸法…横隔膜ストレッチ</a>
+        <a href="https://www.youtube.com/watch?v=A14yR2lL20k" target="_blank" rel="noopener">自律神経を整える 横隔膜ストレッチ</a>
+      </div>
+      <a class="ch" href="https://www.youtube.com/channel/UCyZ2zrHx_8p96fJNt_VjjrA" target="_blank" rel="noopener">▶ カラダマニアちゃんねる</a>
+    </div>
+  </details>
+
+  <footer>
+    <p class="med">呼気を無理に長くしすぎないでください（過換気に注意）。めまい・気分不良・手足のしびれを感じたら、すぐ中止して自然な呼吸に戻してください。息苦しさが続く場合は医療機関へ。呼吸器疾患・心疾患のある方、妊娠中の方、パニック・不安の既往がある方は、始める前に主治医へご相談ください。「治る・必ず効く」というものではありません。</p>
+    <a class="up" href="https://bodydiscovery.info/owned-optin" id="up" target="_blank" rel="noopener">もっと学びたい人へ（無料ガイド）</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let voiceOn = true;
+  const mute = $('mute');
+  mute.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    mute.setAttribute('aria-pressed', String(voiceOn));
+    mute.textContent = voiceOn ? '🔈 音声オン' : '🔇 音声オフ';
+    if(!voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+  });
+  // iOS対策：speechSynthesisを毎サイクル cancel→speak で叩くと長時間ループで音声エンジンがハングし
+  // ページごと落ちる（既知）。→ cancelは停止時のみ／発話中・待機中はスキップ／try-catchで失敗しても
+  // 呼吸ガイド（orb＋文字）は独立して継続（グレースフルデグラデーション）。
+  const say = (t) => {
+    if(!voiceOn || !('speechSynthesis' in window)) return;
+    try{
+      if(speechSynthesis.speaking || speechSynthesis.pending) return;
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = 'ja-JP'; u.rate = .9; u.pitch = 1;
+      speechSynthesis.speak(u);
+    }catch(e){ /* 音声が使えなくても視覚ガイドで継続 */ }
+  };
+
+  // Guide state machine
+  const orb = $('orb'), phase = $('phase'), cycleEl = $('cycle'), gBtn = $('guideBtn');
+  let running=false, timer=null, cycles=0;
+  // ===== CONFIG（呼吸ガイドのタイミング） =====
+  const INHALE=4000, HOLD=800;                       // 吸気4秒固定・ホールド0.8秒
+  const EXHALE_START=6000, EXHALE_STEP=1000, EXHALE_MAX=12000; // 呼気：6秒→1秒ずつ→最大12秒
+  const EXHALE_RAND_MIN=8000, EXHALE_RAND_MAX=14000; // 12秒到達後：8〜14秒でランダム
+  let exhaleMs=EXHALE_START;
+  // その回の呼気ms：漸増→上限到達後はランダム
+  function nextExhale(){
+    if(exhaleMs < EXHALE_MAX){ exhaleMs = Math.min(exhaleMs + EXHALE_STEP, EXHALE_MAX); }
+    else { exhaleMs = EXHALE_RAND_MIN + Math.random()*(EXHALE_RAND_MAX - EXHALE_RAND_MIN); }
+    return exhaleMs;
+  }
+  function setOrb(scale, dur){ orb.style.transitionDuration = dur+'ms'; orb.style.transform = 'scale('+scale+')'; }
+  function step(kind){
+    if(!running) return;
+    if(kind==='inhale'){ phase.textContent='吸って'; say('吸って'); setOrb(1,INHALE); timer=setTimeout(()=>step('hold'),INHALE); }
+    else if(kind==='hold'){ phase.textContent='止めて'; setOrb(1,HOLD); timer=setTimeout(()=>step('exhale'),HOLD); }
+    else { const ex=exhaleMs; phase.textContent='長く、吐いて（'+Math.round(ex/1000)+'秒）'; say('長く吐いて'); setOrb(.62,ex);
+      timer=setTimeout(()=>{ cycles++; cycleEl.textContent=cycles+' 呼吸'; nextExhale(); step('inhale'); },ex); }
+  }
+  function startGuide(){ running=true; cycles=0; exhaleMs=EXHALE_START; cycleEl.textContent='0 呼吸'; gBtn.textContent='やめる'; step('inhale'); }
+  function stopGuide(){ running=false; clearTimeout(timer); if('speechSynthesis' in window) speechSynthesis.cancel();
+    setOrb(.62,600); phase.textContent='おつかれさま'; gBtn.textContent='開始する'; }
+  gBtn.addEventListener('click', ()=> running ? stopGuide() : startGuide());
+
+  $('up').addEventListener('click', ()=>{ /* オウンドメディア無料オプトインへ遷移（実リンク） */ });
+})();
+</script>
+<div class="install" id="install" role="dialog" aria-label="ホーム画面に追加" hidden>
+  <div class="msg" id="installMsg"></div>
+  <button class="x" id="installX" aria-label="閉じる">×</button>
+</div>
+<script>
+(function(){
+  var el=document.getElementById('install'), msg=document.getElementById('installMsg');
+  var standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
+  if(standalone) return;
+  var ua=navigator.userAgent||'';
+  if(/iPhone|iPad|iPod/.test(ua)){
+    msg.innerHTML='iPhoneの方は <b>共有</b> ボタン → <b>「ホーム画面に追加」</b> でアプリとして使えます。';
+  }else{
+    msg.innerHTML='<b>ホーム画面に追加</b> すると、アプリのように使えます（メニュー →「ホーム画面に追加」）。';
+  }
+  el.hidden=false;
+  document.getElementById('installX').addEventListener('click',function(){ el.hidden=true; });
+})();
+</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+<script>
+(function(){var s=document.getElementById('splash');if(!s)return;
+ setTimeout(function(){s.classList.add('hide');setTimeout(function(){s.style.display='none';},650);},1600);})();
+</script>
+</body>
+</html>
