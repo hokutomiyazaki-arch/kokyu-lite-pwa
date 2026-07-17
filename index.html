@@ -118,6 +118,7 @@
     </div>
     <div class="phase" id="phase">準備できたら開始</div>
     <div class="count" id="cycle">0 呼吸</div>
+    <div class="count" id="remain" hidden></div>
     <button class="cta" id="guideBtn">開始する</button>
     <p class="hint">吸う4秒 → 吐く息を少しずつ長く（最大12秒）。慣れたらリズムをランダムに。玉が縮む間、最後まで吐き切ってみてください。</p>
   </section>
@@ -164,7 +165,10 @@
     voiceOn = !voiceOn;
     mute.setAttribute('aria-pressed', String(voiceOn));
     mute.textContent = voiceOn ? '🔈 音声オン' : '🔇 音声オフ';
-    if(!voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+    if(!voiceOn){
+      if('speechSynthesis' in window) speechSynthesis.cancel();
+      stopGuideAudio(); // ミュートにしたらmp3ナレーションも即停止
+    }
   });
   // iOS対策：speechSynthesisを毎サイクル cancel→speak で叩くと長時間ループで音声エンジンがハングし
   // ページごと落ちる（既知）。→ cancelは停止時のみ／発話中・待機中はスキップ／try-catchで失敗しても
@@ -179,9 +183,50 @@
     }catch(e){ /* 音声が使えなくても視覚ガイドで継続 */ }
   };
 
+  // ===== 人間ナレーション（mp3）：局面ごとに1本。失敗時は say()（SpeechSynthesis）へ予備降格 =====
+  const GUIDE_SRC = {
+    inhale:'audio/guide-inhale.mp3',
+    exhale:'audio/guide-exhale.mp3',
+    start :'audio/guide-start.mp3',
+    done  :'audio/guide-done.mp3'
+  };
+  let curGuide = null; // Audioを使い回す（iOS対策・多重生成回避）
+  function playGuide(key, fallbackText){
+    if(!voiceOn) return null;              // ミュート中は鳴らさない
+    const src = GUIDE_SRC[key];
+    if(!src){ if(fallbackText) say(fallbackText); return null; }
+    try{
+      if(curGuide){ try{ curGuide.pause(); curGuide.currentTime = 0; }catch(e){} } // 前を止めて頭から
+      if(!curGuide) curGuide = new Audio();
+      curGuide.onended = null;             // 前回のstart用ハンドラを解除
+      curGuide.src = src;
+      curGuide.currentTime = 0;
+      const p = curGuide.play();
+      if(p && typeof p.catch === 'function'){ p.catch(()=>{ if(fallbackText) say(fallbackText); }); }
+      return curGuide;
+    }catch(e){ if(fallbackText) say(fallbackText); return null; }
+  }
+  function stopGuideAudio(){ try{ if(curGuide){ curGuide.pause(); curGuide.currentTime = 0; curGuide.onended = null; } }catch(e){} }
+
   // Guide state machine
-  const orb = $('orb'), phase = $('phase'), cycleEl = $('cycle'), gBtn = $('guideBtn');
+  const orb = $('orb'), phase = $('phase'), cycleEl = $('cycle'), gBtn = $('guideBtn'), remainEl = $('remain');
   let running=false, timer=null, cycles=0;
+  // ===== 3分セッションタイマー（Date.nowベース・ドリフト回避） =====
+  const SESSION_MS = 180000;   // 合計3分
+  let sessionStart = 0, tick = null;
+  function fmtRemain(ms){ ms = Math.max(0, ms); const s = Math.ceil(ms/1000); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+  function updateTimer(){
+    const rem = SESSION_MS - (Date.now() - sessionStart);
+    if(rem <= 0){ finishSession(); return; }
+    remainEl.textContent = '残り ' + fmtRemain(rem);
+  }
+  function startTimer(){ sessionStart = Date.now(); remainEl.hidden = false; updateTimer(); tick = setInterval(updateTimer, 250); }
+  function stopTimer(){ if(tick){ clearInterval(tick); tick = null; } }
+  function finishSession(){
+    stopGuide();                          // 呼吸ガイド停止（mp3・タイマーも止まる）
+    phase.textContent = '3分、おつかれさま';
+    playGuide('done');                    // playGuide内でvoiceOnを尊重（オフなら鳴らない）
+  }
   // ===== CONFIG（呼吸ガイドのタイミング） =====
   const INHALE=4000, HOLD=800;                       // 吸気4秒固定・ホールド0.8秒
   const EXHALE_START=6000, EXHALE_STEP=1000, EXHALE_MAX=12000; // 呼気：6秒→1秒ずつ→最大12秒
@@ -196,14 +241,29 @@
   function setOrb(scale, dur){ orb.style.transitionDuration = dur+'ms'; orb.style.transform = 'scale('+scale+')'; }
   function step(kind){
     if(!running) return;
-    if(kind==='inhale'){ phase.textContent='吸って'; say('吸って'); setOrb(1,INHALE); timer=setTimeout(()=>step('hold'),INHALE); }
+    if(kind==='inhale'){ phase.textContent='吸って'; playGuide('inhale','吸って'); setOrb(1,INHALE); timer=setTimeout(()=>step('hold'),INHALE); }
     else if(kind==='hold'){ phase.textContent='止めて'; setOrb(1,HOLD); timer=setTimeout(()=>step('exhale'),HOLD); }
-    else { const ex=exhaleMs; phase.textContent='長く、吐いて（'+Math.round(ex/1000)+'秒）'; say('長く吐いて'); setOrb(.62,ex);
+    else { const ex=exhaleMs; phase.textContent='長く、吐いて（'+Math.round(ex/1000)+'秒）'; playGuide('exhale','長く吐いて'); setOrb(.62,ex);
       timer=setTimeout(()=>{ cycles++; cycleEl.textContent=cycles+' 呼吸'; nextExhale(); step('inhale'); },ex); }
   }
-  function startGuide(){ running=true; cycles=0; exhaleMs=EXHALE_START; cycleEl.textContent='0 呼吸'; gBtn.textContent='やめる'; step('inhale'); }
-  function stopGuide(){ running=false; clearTimeout(timer); if('speechSynthesis' in window) speechSynthesis.cancel();
-    setOrb(.62,600); phase.textContent='おつかれさま'; gBtn.textContent='開始する'; }
+  function startGuide(){
+    running=true; cycles=0; exhaleMs=EXHALE_START; cycleEl.textContent='0 呼吸';
+    gBtn.textContent='やめる';
+    startTimer();                          // 3分計測スタート
+    setOrb(.62,600); phase.textContent='はじめましょう';
+    let begun=false;
+    const begin=()=>{ if(running && !begun){ begun=true; step('inhale'); } };
+    // 導入ナレーション(start)を鳴らし、鳴り終わってから1呼吸目（被り回避・自然さ優先）
+    const a = playGuide('start');
+    if(a){
+      a.onended = begin;
+      setTimeout(begin, 9000);             // 保険：長すぎ/無反応でも必ず開始
+    }else{
+      begin();                             // ミュート/再生不可の環境は即開始
+    }
+  }
+  function stopGuide(){ running=false; clearTimeout(timer); stopTimer(); if('speechSynthesis' in window) speechSynthesis.cancel(); stopGuideAudio();
+    remainEl.hidden=true; setOrb(.62,600); phase.textContent='おつかれさま'; gBtn.textContent='開始する'; }
   gBtn.addEventListener('click', ()=> running ? stopGuide() : startGuide());
 
   $('up').addEventListener('click', ()=>{ /* オウンドメディア無料オプトインへ遷移（実リンク） */ });
