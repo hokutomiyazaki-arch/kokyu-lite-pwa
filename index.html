@@ -288,7 +288,11 @@
   document.getElementById('installX').addEventListener('click',function(){ el.hidden=true; });
 })();
 </script>
-<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+<script>if('serviceWorker' in navigator){
+  var _reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){ if(_reloading)return; _reloading=true; window.location.reload(); });
+  window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});
+}</script>
 <script>
 (function(){var s=document.getElementById('splash');if(!s)return;
  setTimeout(function(){s.classList.add('hide');setTimeout(function(){s.style.display='none';},650);},1600);})();
