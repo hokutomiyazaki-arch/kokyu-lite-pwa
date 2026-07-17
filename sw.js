@@ -1,5 +1,5 @@
 // 呼吸のスイッチ SW ─ Network First（更新が即届く）＋オフライン時キャッシュフォールバック
-const C='kokyu-lite-v1.0.3';
+const C='kokyu-lite-v1.0.4';
 const A=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png',
   './audio/guide-inhale.mp3','./audio/guide-exhale.mp3','./audio/guide-start.mp3','./audio/guide-done.mp3'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(A)).then(()=>self.skipWaiting()));});

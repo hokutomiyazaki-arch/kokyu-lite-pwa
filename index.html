@@ -196,13 +196,17 @@
     const src = GUIDE_SRC[key];
     if(!src){ if(fallbackText) say(fallbackText); return null; }
     try{
+      // 直前のTTS(機械音声)が残っているとmp3と二重になるので必ず止める
+      try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){}
       if(curGuide){ try{ curGuide.pause(); curGuide.currentTime = 0; }catch(e){} } // 前を止めて頭から
       if(!curGuide) curGuide = new Audio();
       curGuide.onended = null;             // 前回のstart用ハンドラを解除
       curGuide.src = src;
       curGuide.currentTime = 0;
       const p = curGuide.play();
-      if(p && typeof p.catch === 'function'){ p.catch(()=>{ if(fallbackText) say(fallbackText); }); }
+      // ★AbortError（src差し替え/pauseで再生が中断）でTTSを鳴らすと人間音声と二重になる＝無視。
+      //   本当に自動再生ブロック(NotAllowedError)の時だけTTSにフォールバック。
+      if(p && typeof p.catch === 'function'){ p.catch(err=>{ if(err && err.name === 'NotAllowedError' && fallbackText) say(fallbackText); }); }
       return curGuide;
     }catch(e){ if(fallbackText) say(fallbackText); return null; }
   }
